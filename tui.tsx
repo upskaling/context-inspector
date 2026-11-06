@@ -12,9 +12,21 @@ export default Plugin.define({
     const open = (name: string) =>
       context.ui.router.navigate({ type: "plugin", name })
 
+    // `skill.sync` est asynchrone : sans l'attendre, `list()` renvoie seulement
+    // les skills déjà en cache côté client (les built-in), pas celles du serveur.
+    const syncSkills = async () => {
+      const location = context.location ?? context.data.location.default()
+      await context.data.location.skill.sync(location)
+    }
+
+    const openSynced = (name: string) =>
+      void syncSkills().then(
+        () => open(name),
+        () => open(name),
+      )
+
     const renderTable = (mode: "summary" | "full") => {
       const location = context.location ?? context.data.location.default()
-      context.data.location.skill.sync(location)
       const skills = context.data.location.skill.list(location) ?? []
 
       const items = skills
@@ -81,14 +93,14 @@ export default Plugin.define({
           title: "Show context usage (titles + descriptions)",
           palette: true,
           slash: { name: DEFAULT_ROUTE },
-          run: () => open(DEFAULT_ROUTE),
+          run: () => openSynced(DEFAULT_ROUTE),
         },
         {
           id: "context-inspector.usage.full",
           title: "Show context usage (full skill content)",
           palette: true,
           slash: { name: FULL_ROUTE },
-          run: () => open(FULL_ROUTE),
+          run: () => openSynced(FULL_ROUTE),
         },
         {
           id: "context-inspector.close",
