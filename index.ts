@@ -23,7 +23,13 @@ export default Plugin.define({
             if (t > 0) entries.push({ label: `plugin ${p.id ?? p.name}`, tokens: t })
           }
           for (const s of arrS) {
-            const t = count(s.content ?? s.description ?? "")
+            // Seuls les skills réellement chargés sont comptés : le registre
+            // reflète déjà les transforms (dont le filtrage de skill-groups),
+            // et un skill sans description / en autoinvoke:false n'est pas
+            // annoncé au modèle.
+            const description = String(s.description ?? "").trim()
+            if (!description || s.autoinvoke === false) continue
+            const t = count(`${s.name ?? s.id ?? ""} ${description}`)
             if (t > 0) entries.push({ label: `skill ${s.id ?? s.name}`, tokens: t })
           }
           entries.sort((a, b) => b.tokens - a.tokens)

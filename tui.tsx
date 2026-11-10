@@ -6,30 +6,51 @@ const FULL_ROUTE = "context-usage-full"
 const pad = (v: string, w: number) => v + " ".repeat(Math.max(0, w - v.length))
 const tok = (n: number) => Math.round(n / 4)
 
+/** Un skill est « chargé » s'il est dans le registre après les transforms
+ *  (skill-groups inclus) et qu'il est annoncé au modèle (description, autoinvoke). */
+const isLoaded = (skill: any) =>
+  !!skill &&
+  String(skill.description ?? "").trim().length > 0 &&
+  skill.autoinvoke !== false
+
+const toSkillArray = (output: any): any[] => {
+  if (Array.isArray(output)) return output
+  if (Array.isArray(output?.data)) return output.data
+  if (Array.isArray(output?.skills)) return output.skills
+  return []
+}
+
 export default Plugin.define({
   id: "context-inspector",
   setup(context) {
+    const location = () => context.location ?? context.data.location.default()
     const open = (name: string) =>
       context.ui.router.navigate({ type: "plugin", name })
 
-    // `skill.sync` est asynchrone : sans l'attendre, `list()` renvoie seulement
-    // les skills déjà en cache côté client (les built-in), pas celles du serveur.
-    const syncSkills = async () => {
-      const location = context.location ?? context.data.location.default()
-      await context.data.location.skill.sync(location)
+    // On interroge le serveur plutôt que le cache TUI : la liste reflète alors
+    // le registre après transforms, donc les skills masqués par skill-groups
+    // n'apparaissent plus (y compris si le cache date d'avant le filtrage).
+    let loadedSkills: any[] = []
+
+    const refreshSkills = async () => {
+      try {
+        const response = await context.client.skill.list({ location: location() })
+        loadedSkills = toSkillArray(response).filter(isLoaded)
+      } catch (error) {
+        loadedSkills = []
+        context.ui.toast.show({
+          message: "Context inspector: impossible de charger la liste des skills",
+          variant: "error",
+          duration: 5000,
+        })
+      }
     }
 
     const openSynced = (name: string) =>
-      void syncSkills().then(
-        () => open(name),
-        () => open(name),
-      )
+      void refreshSkills().then(() => open(name))
 
     const renderTable = (mode: "summary" | "full") => {
-      const location = context.location ?? context.data.location.default()
-      const skills = context.data.location.skill.list(location) ?? []
-
-      const items = skills
+      const items = loadedSkills
         .map((s: any) => {
           const name = String(s.id ?? s.name)
           const description = String(s.description ?? "")
@@ -49,8 +70,8 @@ export default Plugin.define({
 
       const title =
         mode === "summary"
-          ? "Skills — tokens du titre + description"
-          : "Skills — tokens du contenu complet (usage)"
+          ? "Skills chargés — tokens du titre + description"
+          : "Skills chargés — tokens du contenu complet (usage)"
       const other = mode === "summary" ? FULL_ROUTE : DEFAULT_ROUTE
       const otherLabel =
         mode === "summary" ? "→ Voir le contenu complet" : "← Voir titre + description"
@@ -58,7 +79,7 @@ export default Plugin.define({
       return (
         <box>
           <text fg={context.theme.text.base} onMouseUp={() => context.ui.router.navigate({ type: "home" })}>✕ Close (Esc)</text>
-          <text fg={context.theme.text.base} onMouseUp={() => open(other)}>{otherLabel}</text>
+          <text fg={context.theme.text.base} onMouseUp={() => openSynced(other)}>{otherLabel}</text>
           <text fg={context.theme.text.base}>{title}</text>
           <text fg={context.theme.text.base}>{`${pad("Name", nameWidth)} | ${pad("Size", sizeWidth)} | ${pad("Tokens", tokWidth)} | Pct  | Chart`}</text>
           <text fg={context.theme.text.base}>{`${"-".repeat(nameWidth)}-+-${"-".repeat(sizeWidth)}-+-${"-".repeat(tokWidth)}-+------+${"-".repeat(maxBar)}`}</text>

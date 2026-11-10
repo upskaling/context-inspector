@@ -1,7 +1,7 @@
 {
   "name": "context-inspector",
   "version": "1.0.0",
-  "description": "Plugin OpenCode qui affiche l'utilisation du contexte (plugins et skills actifs) et propose une commande pour lister/désactiver.",
+  "description": "Plugin OpenCode qui affiche l'utilisation du contexte par les skills réellement chargés.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
